@@ -1,0 +1,6 @@
+build
+install
+log
+
+venv
+gps_waypoint_publisher.egg-info
