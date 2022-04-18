@@ -4,10 +4,12 @@ from typing import List
 import rclpy
 import rclpy.logging
 import rclpy.qos
+import rclpy.action
 import utm
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped
 from sensor_msgs.msg import NavSatFix, MagneticField
+from nav2_msgs.action import FollowWaypoints
 
 
 class GpsWaypointPublisher(Node):
@@ -34,6 +36,9 @@ class GpsWaypointPublisher(Node):
         self.create_subscription(
             MagneticField, "/mag", self.on_mag, rclpy.qos.qos_profile_system_default)
 
+        self.nav_client = rclpy.action.ActionClient(
+            self, FollowWaypoints, "/follow_waypoints")
+
     def on_initalpose(self, msg: PoseWithCovarianceStamped):
         if msg.header.frame_id != "map":
             self.get_logger().error("Initial pose was not set in map frame!")
@@ -42,12 +47,16 @@ class GpsWaypointPublisher(Node):
         # This allows for us to receive initial GPS and mag messages
         self.ip_received = True
 
+        self.get_logger().info("Waiting on a gps and mag lock...")
+
         # Wait until we get a lock.
         while self.first_gps is None or self.first_bearing is None:
             rclpy.spin_once()
 
-        self.convert_gps()
-        # TODO send points
+        self.get_logger().info("Lock obtained! Converting points...")
+
+        points = self.convert_gps()
+        self.start_waypoint_following(points)
 
     def on_gps(self, msg: NavSatFix):
         if self.first_gps is not None and msg.latitude != 0 and self.ip_received:
@@ -68,7 +77,12 @@ class GpsWaypointPublisher(Node):
 
             # Read lat, long from each line and convert
             for line in f.readlines():
-                split = line.split(',')
+
+                # Comment support
+                if line.strip()[0] == "#":
+                    continue
+
+                split = line.strip().split(',')
                 lat = float(split[0])
                 lon = float(split[1])
 
@@ -89,3 +103,20 @@ class GpsWaypointPublisher(Node):
                 ps.header.stamp = self.get_clock().now()
 
             return out_points
+
+    def start_waypoint_following(self, points: List[PoseStamped]):
+        if not self.nav_client.wait_for_server(5):
+            self.get_logger().error("FollowWaypoints action server is not available!")
+        else:
+            self.get_logger().info("Begginging to navigate to {} waypoints:", len(points))
+
+            for (i, point) in enumerate(points):
+                self.get_logger().info("Point {}: x={};y={};", i,
+                                       point.pose.position.x, point.pose.position.y)
+
+            goal = FollowWaypoints.Goal()
+            goal.poses = points
+            fut = self.nav_client.send_goal_async(goal)
+            rclpy.spin_until_future_complete(self, fut)
+
+            self.get_logger().info("Finished navigation.")
