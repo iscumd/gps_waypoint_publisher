@@ -7,9 +7,8 @@ import rclpy.qos
 import rclpy.action
 import utm
 from rclpy.node import Node
-from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, PoseArray, Pose
 from sensor_msgs.msg import NavSatFix, MagneticField
-from nav2_msgs.action import FollowWaypoints
 
 
 class GpsWaypointPublisher(Node):
@@ -36,8 +35,8 @@ class GpsWaypointPublisher(Node):
         self.create_subscription(
             MagneticField, "/mag", self.on_mag, rclpy.qos.qos_profile_sensor_data)
 
-        self.nav_client = rclpy.action.ActionClient(
-            self, FollowWaypoints, "/follow_waypoints")
+        self.wpp_handle = self.create_publisher(
+            PoseArray, "/gps/points", qos_profile=rclpy.qos.qos_profile_system_default)
 
     def on_initalpose(self, msg: PoseWithCovarianceStamped):
         if msg.header.frame_id != "map":
@@ -72,9 +71,9 @@ class GpsWaypointPublisher(Node):
                 msg.magnetic_field.y, msg.magnetic_field.x) * 180 / pi
             self.get_logger().info("using a bearing of: {}".format(self.first_bearing))
 
-    def convert_gps(self) -> List[PoseStamped]:
+    def convert_gps(self) -> List[Pose]:
         with open(self.filepath) as f:
-            out_points: List[PoseStamped] = []
+            out_points: List[Pose] = []
 
             (first_utm_e, first_utm_n, _, _) = utm.from_latlon(
                 self.first_gps.latitude, self.first_gps.longitude)
@@ -96,32 +95,25 @@ class GpsWaypointPublisher(Node):
                 x = easting - first_utm_e
                 y = northing - first_utm_n
 
-                ps = PoseStamped()
+                ps = Pose()
                 # Apply vector rotation
-                ps.pose.position.x = cos(
+                ps.position.x = cos(
                     self.first_bearing).real * x - sin(self.first_bearing).real * y
-                ps.pose.position.y = sin(
+                ps.position.y = sin(
                     self.first_bearing).real * x + cos(self.first_bearing).real * y
 
-                ps.header.frame_id = "map"
-                ps.header.stamp = self.get_clock().now().to_msg()
-                out_points.append(ps)
+            self.get_logger().info("Converted points:")
+            for (i, point) in enumerate(out_points):
+                self.get_logger().info("point {}: x={}; y={};".format(
+                    i, point.position.x, point.position.y))
 
             return out_points
 
-    def start_waypoint_following(self, points: List[PoseStamped]):
-        if not self.nav_client.wait_for_server(5):
-            self.get_logger().error("FollowWaypoints action server is not available!")
-        else:
-            self.get_logger().info("Begginging to navigate to {} waypoints:".format(len(points)))
+    def start_waypoint_following(self, points: List[Pose]):
+        pa = PoseArray()
+        pa.poses = points
+        pa.header.frame_id = "map"
+        pa.header.stamp = self.get_clock().now().to_msg()
 
-            for (i, point) in enumerate(points):
-                self.get_logger().info("Point {}: x={};y={};".format(i,
-                                       point.pose.position.x, point.pose.position.y))
-
-            goal = FollowWaypoints.Goal()
-            goal.poses = points
-            fut = self.nav_client.send_goal_async(goal)
-            rclpy.spin_until_future_complete(self, fut)
-
-            self.get_logger().info("Finished navigation.")
+        self.get_logger().info("Sent points to wpp")
+        self.wpp_handle.publish(pa)
