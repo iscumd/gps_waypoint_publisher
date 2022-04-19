@@ -31,10 +31,10 @@ class GpsWaypointPublisher(Node):
         self.create_subscription(
             PoseWithCovarianceStamped, "/initialpose", self.on_initalpose, rclpy.qos.qos_profile_system_default)
         self.create_subscription(
-            NavSatFix, "/gps", self.on_gps, rclpy.qos.qos_profile_system_default)
+            NavSatFix, "/gps", self.on_gps, rclpy.qos.qos_profile_sensor_data)
         # A magnometer reading, for bearing
         self.create_subscription(
-            MagneticField, "/mag", self.on_mag, rclpy.qos.qos_profile_system_default)
+            MagneticField, "/mag", self.on_mag, rclpy.qos.qos_profile_sensor_data)
 
         self.nav_client = rclpy.action.ActionClient(
             self, FollowWaypoints, "/follow_waypoints")
@@ -51,7 +51,8 @@ class GpsWaypointPublisher(Node):
 
         # Wait until we get a lock.
         while self.first_gps is None or self.first_bearing is None:
-            rclpy.spin_once()
+            rclpy.spin_once(self, timeout_sec=1.0)
+            self.get_logger().info("Still no gps lock...")
 
         self.get_logger().info("Lock obtained! Converting points...")
 
@@ -59,14 +60,17 @@ class GpsWaypointPublisher(Node):
         self.start_waypoint_following(points)
 
     def on_gps(self, msg: NavSatFix):
-        if self.first_gps is not None and msg.latitude != 0 and self.ip_received:
+        if self.first_gps is None and msg.latitude != 0:
+            self.get_logger().info("Got GPS!")
             self.first_gps = msg
 
     def on_mag(self, msg: MagneticField):
-        if self.first_bearing is not None and self.ip_received:
+        if self.first_bearing is None:
+            self.get_logger().info("Got Mag!")
             # Convert magnetic fields to degrees from magnetic north (0 degrees). Ex. east is +90
             self.first_bearing = atan2(
                 msg.magnetic_field.y, msg.magnetic_field.x) * 180 / pi
+            self.get_logger().info("using a bearing of: {}".format(self.first_bearing))
 
     def convert_gps(self) -> List[PoseStamped]:
         with open(self.filepath) as f:
@@ -95,12 +99,13 @@ class GpsWaypointPublisher(Node):
                 ps = PoseStamped()
                 # Apply vector rotation
                 ps.pose.position.x = cos(
-                    self.first_bearing) * x - sin(self.first_bearing) * y
+                    self.first_bearing).real * x - sin(self.first_bearing).real * y
                 ps.pose.position.y = sin(
-                    self.first_bearing) * x + cos(self.first_bearing) * y
+                    self.first_bearing).real * x + cos(self.first_bearing).real * y
 
                 ps.header.frame_id = "map"
-                ps.header.stamp = self.get_clock().now()
+                ps.header.stamp = self.get_clock().now().to_msg()
+                out_points.append(ps)
 
             return out_points
 
@@ -108,11 +113,11 @@ class GpsWaypointPublisher(Node):
         if not self.nav_client.wait_for_server(5):
             self.get_logger().error("FollowWaypoints action server is not available!")
         else:
-            self.get_logger().info("Begginging to navigate to {} waypoints:", len(points))
+            self.get_logger().info("Begginging to navigate to {} waypoints:".format(len(points)))
 
             for (i, point) in enumerate(points):
-                self.get_logger().info("Point {}: x={};y={};", i,
-                                       point.pose.position.x, point.pose.position.y)
+                self.get_logger().info("Point {}: x={};y={};".format(i,
+                                       point.pose.position.x, point.pose.position.y))
 
             goal = FollowWaypoints.Goal()
             goal.poses = points
