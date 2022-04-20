@@ -17,9 +17,11 @@ to navigate through these points using nav2's waypoint_follower.
 
 ### Subscribes
 - `/gps`: The source of gps data, used to find the gps point at the initalpose.
-- `/mag`: The source of magnometer data, used to find inital heading.
+- `/pose`: A pose containing the orientation relative to north.
 - `/initalpose`: Standard initalpose. Assumed to be origin of map.
 
 ## Params
 - `filepath **(required)**`: Path to file of GPS points. This file should be `lat,long` pairs, seperated by newlines.
 
+# Misc 
+ To obtain non ROS dependancies, you must run pip install -r requirements.txt in this directory. 

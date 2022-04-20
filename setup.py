@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'utm'],
+    install_requires=['setuptools', 'utm', 'transforms3d'],
     zip_safe=True,
     maintainer='Andrew Ealovega',
     maintainer_email='Andrew@Ealovega.dev',

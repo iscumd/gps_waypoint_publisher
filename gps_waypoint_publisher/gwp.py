@@ -5,10 +5,11 @@ import rclpy
 import rclpy.logging
 import rclpy.qos
 import rclpy.action
+from tf_transformations import euler_from_quaternion
 import utm
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, PoseArray, Pose
-from sensor_msgs.msg import NavSatFix, MagneticField
+from sensor_msgs.msg import NavSatFix
 
 
 class GpsWaypointPublisher(Node):
@@ -33,7 +34,7 @@ class GpsWaypointPublisher(Node):
             NavSatFix, "/gps", self.on_gps, rclpy.qos.qos_profile_sensor_data)
         # A magnometer reading, for bearing
         self.create_subscription(
-            MagneticField, "/mag", self.on_mag, rclpy.qos.qos_profile_sensor_data)
+            PoseStamped, "/pose", self.on_pose, rclpy.qos.qos_profile_sensor_data)
 
         self.wpp_handle = self.create_publisher(
             PoseArray, "/gps/points", qos_profile=rclpy.qos.qos_profile_system_default)
@@ -59,16 +60,17 @@ class GpsWaypointPublisher(Node):
         self.start_waypoint_following(points)
 
     def on_gps(self, msg: NavSatFix):
-        if self.first_gps is None and msg.latitude != 0:
+        if self.first_gps is None and msg.latitude != 0 and self.ip_received:
             self.get_logger().info("Got GPS!")
             self.first_gps = msg
 
-    def on_mag(self, msg: MagneticField):
-        if self.first_bearing is None:
-            self.get_logger().info("Got Mag!")
-            # Convert magnetic fields to degrees from magnetic north (0 degrees). Ex. east is +90
-            self.first_bearing = atan2(
-                msg.magnetic_field.y, msg.magnetic_field.x) * 180 / pi
+    def on_pose(self, msg: PoseStamped):
+        if self.first_bearing is None and self.ip_received:
+            self.get_logger().info("Got Orientation!")
+
+            (_, _, _, yaw) = euler_from_quaternion(msg.pose.orientation)
+            self.first_bearing = (yaw * 180) / pi
+
             self.get_logger().info("using a bearing of: {}".format(self.first_bearing))
 
     def convert_gps(self) -> List[Pose]:
@@ -101,6 +103,7 @@ class GpsWaypointPublisher(Node):
                     self.first_bearing).real * x - sin(self.first_bearing).real * y
                 ps.position.y = sin(
                     self.first_bearing).real * x + cos(self.first_bearing).real * y
+                out_points.append(ps)
 
             self.get_logger().info("Converted points:")
             for (i, point) in enumerate(out_points):
