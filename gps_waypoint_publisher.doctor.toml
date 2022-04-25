@@ -21,10 +21,6 @@ to navigate through these points using nav2's waypoint_follower.
 misc = 'To obtain non ROS dependancies, you must run pip install -r requirements.txt in this directory.'
 
 [[nodes.subscribes]]
-name = '/gps'
-description = 'The source of gps data, used to find the gps point at the initalpose.'
-
-[[nodes.subscribes]]
 name = '/pose'
 description = 'A pose containing the orientation relative to north.'
 

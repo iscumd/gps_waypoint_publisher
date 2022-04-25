@@ -1,14 +1,16 @@
 from math import degrees, cos, sin
-from typing import List
+from typing import List, Optional, Tuple
 import rclpy
 import rclpy.logging
 import rclpy.qos
 import rclpy.action
 from tf_transformations import euler_from_quaternion
-import utm
+from pygeodesy.ecef import EcefKarney, Ecef9Tuple
+from pygeodesy.ellipsoids import Ellipsoids
+from pygeodesy.utm import Utm, toUtm8
+from pygeodesy.points import LatLon_
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, PoseArray, Pose
-from sensor_msgs.msg import NavSatFix
 
 
 class GpsWaypointPublisher(Node):
@@ -16,7 +18,7 @@ class GpsWaypointPublisher(Node):
         super().__init__('gps_waypoint_publisher')
 
         # The first GPS point received after ip received
-        self.first_gps = None
+        self.first_gps: Optional[Tuple[float, float]] = None
         # The first bearing (in degrees) received after ip received
         self.first_bearing = None
         # Wether the initial pose has been received yet
@@ -29,8 +31,6 @@ class GpsWaypointPublisher(Node):
 
         self.create_subscription(
             PoseWithCovarianceStamped, "/initialpose", self.on_initalpose, rclpy.qos.qos_profile_system_default)
-        self.create_subscription(
-            NavSatFix, "/gps", self.on_gps, rclpy.qos.qos_profile_sensor_data)
         # A magnometer reading, for bearing
         self.create_subscription(
             PoseStamped, "/pose", self.on_pose, rclpy.qos.qos_profile_sensor_data)
@@ -58,11 +58,6 @@ class GpsWaypointPublisher(Node):
         points = self.convert_gps()
         self.start_waypoint_following(points)
 
-    def on_gps(self, msg: NavSatFix):
-        if self.first_gps is None and msg.latitude != 0 and self.ip_received:
-            self.get_logger().info("Got GPS!")
-            self.first_gps = msg
-
     def on_pose(self, msg: PoseStamped):
         if self.first_bearing is None and self.ip_received:
             self.get_logger().info("Got Orientation!")
@@ -72,12 +67,20 @@ class GpsWaypointPublisher(Node):
 
             self.get_logger().info(f"using a bearing of: {degrees(self.first_bearing)} degrees")
 
+            # Convert the pose ECEF format to lat long
+            converter = EcefKarney(Ellipsoids.GRS80)
+            tup: Ecef9Tuple = converter.reverse(msg.pose.position)
+            (lat, long) = tup.latlon
+            self.first_gps = (lat, long)
+
     def convert_gps(self) -> List[Pose]:
         with open(self.filepath) as f:
             out_points: List[Pose] = []
 
-            (first_utm_e, first_utm_n, _, _) = utm.from_latlon(
-                self.first_gps.latitude, self.first_gps.longitude)
+            # Convert the now lat,long point into UTM
+            utm: Utm = toUtm8(LatLon_(
+                self.first_gps[0], self.first_gps[1]))
+            (first_utm_e, first_utm_n) = utm.eastingnorthing
 
             # Read lat, long from each line and convert
             for line in f.readlines():
@@ -90,7 +93,8 @@ class GpsWaypointPublisher(Node):
                 lat = float(split[0])
                 lon = float(split[1])
 
-                (easting, northing, _, _) = utm.from_latlon(lat, lon)
+                conv: Utm = toUtm8(LatLon_(lat, lon))
+                (easting, northing) = conv.eastingnorthing
 
                 # UTM is in meteres, so we can just offset
                 x = easting - first_utm_e
