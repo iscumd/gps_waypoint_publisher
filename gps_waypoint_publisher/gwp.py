@@ -1,5 +1,4 @@
-from cmath import cos, pi, sin
-from math import atan2
+from math import degrees, cos, sin
 from typing import List
 import rclpy
 import rclpy.logging
@@ -69,9 +68,9 @@ class GpsWaypointPublisher(Node):
             self.get_logger().info("Got Orientation!")
 
             (_, _, _, yaw) = euler_from_quaternion(msg.pose.orientation)
-            self.first_bearing = (yaw * 180) / pi
+            self.first_bearing = yaw
 
-            self.get_logger().info("using a bearing of: {}".format(self.first_bearing))
+            self.get_logger().info(f"using a bearing of: {degrees(self.first_bearing)} degrees")
 
     def convert_gps(self) -> List[Pose]:
         with open(self.filepath) as f:
@@ -100,9 +99,9 @@ class GpsWaypointPublisher(Node):
                 ps = Pose()
                 # Apply vector rotation
                 ps.position.x = cos(
-                    self.first_bearing).real * x - sin(self.first_bearing).real * y
+                    self.first_bearing) * x - sin(self.first_bearing) * y
                 ps.position.y = sin(
-                    self.first_bearing).real * x + cos(self.first_bearing).real * y
+                    self.first_bearing) * x + cos(self.first_bearing) * y
                 out_points.append(ps)
 
             self.get_logger().info("Converted points:")
