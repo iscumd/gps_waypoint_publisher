@@ -8,16 +8,18 @@ From package '[gps_waypoint_publisher](https://youtu.be/oHg5SJYRHA0)'
 
 This node requires the use of a magnometer and GPS.
 
-In practice, this node will wait for an initalpoint to be published. When it is, it will then wait for a
-new GPS and magnometer reading to be recived. While this is happening, the robot should not move. Once these
-have been obtained, it will parse the gps points and convert them into local waypoints. Finally, it will begin 
-to navigate through these points using nav2's waypoint_follower.
+In practice, this node will wait for an initalpoint to be published. When it is, it will wait for a pose message, where that pose
+is ECEF coordinates, and its orientation is a rotation from north. This is designed to match the API of the Vectornav driver.
+While this is happening, the robot should not move. Once these have been obtained, it will parse the gps points and convert them into local waypoints. Finally, it will
+publish these poses for consumption by a node like waypoint_publisher.
 
 ## Topics
 
+### Publishes
+- `/gps/points`: The list of converted waypoints.
+
 ### Subscribes
-- `/gps`: The source of gps data, used to find the gps point at the initalpose.
-- `/pose`: A pose containing the orientation relative to north.
+- `/pose`: A pose containing the orientation relative to north, and x y z ECEF gps coordinates.
 - `/initalpose`: Standard initalpose. Assumed to be origin of map.
 
 ## Params

@@ -3,7 +3,7 @@
 <package format="3">
   <name>gps_waypoint_publisher</name>
   <version>0.1.0</version>
-  <description>Transformes a file of gps waypoints into waypoints about a map, and then follows those points.</description>
+  <description>Transformes a file of gps waypoints into waypoints about a map.</description>
   <maintainer email="Andrew@Ealovega.dev">Andrew Ealovega</maintainer>
   <license>MIT</license>
 

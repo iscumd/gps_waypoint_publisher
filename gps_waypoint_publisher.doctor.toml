@@ -12,21 +12,25 @@ A node that converts a file of gps points into waypoints about map, then follows
 
 This node requires the use of a magnometer and GPS.
 
-In practice, this node will wait for an initalpoint to be published. When it is, it will then wait for a
-new GPS and magnometer reading to be recived. While this is happening, the robot should not move. Once these
-have been obtained, it will parse the gps points and convert them into local waypoints. Finally, it will begin 
-to navigate through these points using nav2's waypoint_follower.
+In practice, this node will wait for an initalpoint to be published. When it is, it will wait for a pose message, where that pose
+is ECEF coordinates, and its orientation is a rotation from north. This is designed to match the API of the Vectornav driver.
+While this is happening, the robot should not move. Once these have been obtained, it will parse the gps points and convert them into local waypoints. Finally, it will
+publish these poses for consumption by a node like waypoint_publisher.
 '''
 
 misc = 'To obtain non ROS dependancies, you must run pip install -r requirements.txt in this directory.'
 
 [[nodes.subscribes]]
 name = '/pose'
-description = 'A pose containing the orientation relative to north.'
+description = 'A pose containing the orientation relative to north, and x y z ECEF gps coordinates.'
 
 [[nodes.subscribes]]
 name = '/initalpose'
 description = 'Standard initalpose. Assumed to be origin of map.'
+
+[[nodes.publishes]]
+name = '/gps/points'
+description = 'The list of converted waypoints.'
 
 [[nodes.params]]
 name = 'filepath **(required)**'
