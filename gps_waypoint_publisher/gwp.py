@@ -70,7 +70,14 @@ class GpsWaypointPublisher(Node):
             self.get_logger().info("Got GPS pose!")
 
             (_, _, yaw) = euler_from_quaternion([msg.pose.pose.orientation.w, msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z])
-            self.first_bearing = yaw # In rad
+            self.first_bearing = 0 #yaw # In rad
+
+            #convert from compass notation to our coordinates
+            #if (-1* self.first_bearing) < 0:
+            #    temp = 360.0 - self.first_bearing
+            #else:
+            #    temp = (-1*self.first_bearing)
+            #self.first_bearing = temp
 
             self.get_logger().info(f"using a bearing of: {degrees(self.first_bearing)} degrees")
 
@@ -109,8 +116,8 @@ class GpsWaypointPublisher(Node):
                 (easting, northing) = conv.eastingnorthing
 
                 # UTM is in meteres, so we can just offset
-                x = easting - first_utm_e
-                y = northing - first_utm_n
+                y = easting - first_utm_e
+                x = northing - first_utm_n
 
                 ps = Pose()
                 # Apply vector rotation
