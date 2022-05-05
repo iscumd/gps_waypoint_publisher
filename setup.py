@@ -11,11 +11,11 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'utm'],
+    install_requires=['setuptools', 'transforms3d', 'PyGeodesy'],
     zip_safe=True,
     maintainer='Andrew Ealovega',
     maintainer_email='Andrew@Ealovega.dev',
-    description='Transformes a file of gps waypoints into waypoints about a map, and then follows those points.',
+    description='Transformes a file of gps waypoints into waypoints about a map.',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

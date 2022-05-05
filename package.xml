@@ -3,7 +3,7 @@
 <package format="3">
   <name>gps_waypoint_publisher</name>
   <version>0.1.0</version>
-  <description>Transformes a file of gps waypoints into waypoints about a map, and then follows those points.</description>
+  <description>Transformes a file of gps waypoints into waypoints about a map.</description>
   <maintainer email="Andrew@Ealovega.dev">Andrew Ealovega</maintainer>
   <license>MIT</license>
 
@@ -12,6 +12,8 @@
   <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>nav2_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf_transformations</depend>
   
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
