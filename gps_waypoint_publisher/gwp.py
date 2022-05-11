@@ -137,7 +137,7 @@ class GpsWaypointPublisher(Node):
     def start_waypoint_following(self, points: List[Pose]):
         pa = PoseArray()
         pa.poses = points
-        pa.header.frame_id = "map"
+        pa.header.frame_id = "base_footprint"
         pa.header.stamp = self.get_clock().now().to_msg()
 
         self.get_logger().info("Sent points to wpp")
