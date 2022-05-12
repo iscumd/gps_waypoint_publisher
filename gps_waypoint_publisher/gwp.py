@@ -8,6 +8,7 @@ import rclpy.action
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 from tf_transformations import euler_from_quaternion
+from tf2_ros import Buffer, TransformListener
 
 from pygeodesy.ecef import EcefKarney, Ecef9Tuple
 from pygeodesy.ellipsoids import Ellipsoids
@@ -22,6 +23,9 @@ class GpsWaypointPublisher(Node):
 
         # Initalpose callback blocks, so we run the gps callback in its own thread
         par_cb = ReentrantCallbackGroup()
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
 
         # The first GPS (lat, lon) point received after ip received
         self.first_gps: Optional[Tuple[float, float]] = None
@@ -69,26 +73,31 @@ class GpsWaypointPublisher(Node):
         if self.first_bearing is None and self.ip_received and msg.pose.pose.position.x != 0:
             self.get_logger().info("Got GPS pose!")
 
-            (_, _, yaw) = euler_from_quaternion([msg.pose.pose.orientation.w, msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z])
-            self.first_bearing = 0 #yaw # In rad
+            (_, _, yaw) = euler_from_quaternion(
+                [msg.pose.pose.orientation.w, msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z])
+            self.first_bearing = 0  # yaw # In rad
 
-            #convert from compass notation to our coordinates
-            #if (-1* self.first_bearing) < 0:
+            # convert from compass notation to our coordinates
+            # if (-1* self.first_bearing) < 0:
             #    temp = 360.0 - self.first_bearing
-            #else:
+            # else:
             #    temp = (-1*self.first_bearing)
             #self.first_bearing = temp
 
-            self.get_logger().info(f"using a bearing of: {degrees(self.first_bearing)} degrees")
+            self.get_logger().info(
+                f"using a bearing of: {degrees(self.first_bearing)} degrees")
 
             # Convert the pose ECEF format to lat long
             converter = EcefKarney(Ellipsoids.GRS80)
-            ecef_tup = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z)
-            tup: Ecef9Tuple = converter.reverse(xyz=ecef_tup[0], y=ecef_tup[1], z=ecef_tup[2]) #Yes, this api is terrible
+            ecef_tup = (msg.pose.pose.position.x,
+                        msg.pose.pose.position.y, msg.pose.pose.position.z)
+            tup: Ecef9Tuple = converter.reverse(
+                xyz=ecef_tup[0], y=ecef_tup[1], z=ecef_tup[2])  # Yes, this api is terrible
             (lat, long) = tup.latlon
             self.first_gps = (lat, long)
 
-            self.get_logger().info(f"using a location of: lat: {lat}, long: {long}")
+            self.get_logger().info(
+                f"using a location of: lat: {lat}, long: {long}")
 
     def convert_gps(self) -> List[Pose]:
         """ Converts the gps points in file into poses relative to initalpose """
@@ -125,6 +134,19 @@ class GpsWaypointPublisher(Node):
                     self.first_bearing) * x - sin(self.first_bearing) * y
                 ps.position.y = sin(
                     self.first_bearing) * x + cos(self.first_bearing) * y
+
+                self.get_logger().info(
+                    f"Point before trans: {ps.position.x}, {ps.position.y}")
+
+                # Transform to map frame
+                trans = self.tf_buffer.lookup_transform(
+                    'map', 'base_footprint', 0)
+                ps.position.x += trans.transform.translation.x
+                ps.position.y += trans.transform.translation.y
+
+                self.get_logger().info(
+                    f"Point after trans: {ps.position.x}, {ps.position.y}")
+
                 out_points.append(ps)
 
             self.get_logger().info("Converted points:")
@@ -137,7 +159,7 @@ class GpsWaypointPublisher(Node):
     def start_waypoint_following(self, points: List[Pose]):
         pa = PoseArray()
         pa.poses = points
-        pa.header.frame_id = "base_footprint"
+        pa.header.frame_id = "map"
         pa.header.stamp = self.get_clock().now().to_msg()
 
         self.get_logger().info("Sent points to wpp")
