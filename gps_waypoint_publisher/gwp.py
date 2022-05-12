@@ -7,8 +7,10 @@ import rclpy.qos
 import rclpy.action
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
+from rclpy.time import Time, Duration
 from tf_transformations import euler_from_quaternion
-from tf2_ros import Buffer, TransformListener
+from tf2_ros import Buffer, TransformException
+from tf2_ros.transform_listener import TransformListener
 
 from pygeodesy.ecef import EcefKarney, Ecef9Tuple
 from pygeodesy.ellipsoids import Ellipsoids
@@ -26,6 +28,8 @@ class GpsWaypointPublisher(Node):
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        # Timestamp from pose message
+        self.stamp: Optional[Time] = None
 
         # The first GPS (lat, lon) point received after ip received
         self.first_gps: Optional[Tuple[float, float]] = None
@@ -72,6 +76,9 @@ class GpsWaypointPublisher(Node):
     def on_pose(self, msg: PoseWithCovarianceStamped):
         if self.first_bearing is None and self.ip_received and msg.pose.pose.position.x != 0:
             self.get_logger().info("Got GPS pose!")
+            
+            # Save stamp for transform lookup later
+            self.stamp = Time.from_msg(msg.header.stamp)
 
             (_, _, yaw) = euler_from_quaternion(
                 [msg.pose.pose.orientation.w, msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z])
@@ -125,7 +132,7 @@ class GpsWaypointPublisher(Node):
                 (easting, northing) = conv.eastingnorthing
 
                 # UTM is in meteres, so we can just offset
-                y = easting - first_utm_e
+                y = (easting - first_utm_e) * -1
                 x = northing - first_utm_n
 
                 ps = Pose()
@@ -138,16 +145,18 @@ class GpsWaypointPublisher(Node):
                 self.get_logger().info(
                     f"Point before trans: {ps.position.x}, {ps.position.y}")
 
-                # Transform to map frame
-                trans = self.tf_buffer.lookup_transform(
-                    'map', 'base_footprint', 0)
-                ps.position.x += trans.transform.translation.x
-                ps.position.y += trans.transform.translation.y
+                try:
+                    # Transform to map frame
+                    trans = self.tf_buffer.lookup_transform(
+                        'map', 'base_footprint', self.stamp, Duration(seconds=1))
 
-                self.get_logger().info(
-                    f"Point after trans: {ps.position.x}, {ps.position.y}")
+                    ps.position.x += trans.transform.translation.x
+                    ps.position.y += trans.transform.translation.y
 
-                out_points.append(ps)
+                    self.get_logger().info(f"Point after trans: {ps.position.x}, {ps.position.y}")
+                    out_points.append(ps)
+                except TransformException as ex:
+                    self.get_logger().error(f"transform failed with: {ex}")
 
             self.get_logger().info("Converted points:")
             for (i, point) in enumerate(out_points):
