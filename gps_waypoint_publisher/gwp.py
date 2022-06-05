@@ -1,4 +1,5 @@
 from math import degrees, cos, sin
+from operator import truediv
 from typing import List, Optional, Tuple
 
 import rclpy
@@ -152,6 +153,12 @@ class GpsWaypointPublisher(Node):
 
                     ps.position.x += trans.transform.translation.x
                     ps.position.y += trans.transform.translation.y
+
+                    facing_south = False #TODO change if facing a different direction
+
+                    if facing_south: #TODO check
+                        ps.position.x *= -1
+                        ps.position.y *= -1
 
                     self.get_logger().info(f"Point after trans: {ps.position.x}, {ps.position.y}")
                     out_points.append(ps)
